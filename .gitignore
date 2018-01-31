@@ -1,0 +1,7 @@
+node_modules/
+Web Files/
+*.jpg
+*.png
+*.gif
+*.docx
+*.pdf

@@ -1,0 +1,21 @@
+{
+  "name": "learn-cheerio",
+  "version": "1.0.0",
+  "description": "ashleys learning project",
+  "main": "cheerio.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Ashley Stewart",
+  "license": "MIT",
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.2",
+    "fs": "0.0.1-security",
+    "path": "^0.12.7",
+    "prompt": "^1.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maeashley/cheerio-prompt.git"
+  }
+}
