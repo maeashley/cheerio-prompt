@@ -3,7 +3,7 @@
 /*eslint-env node, es6*/
 /*eslint no-console:0*/
 /*eslint no-undef:0 */
-/*eslint no-unused-vars:0 */
+/*eslint no-unused-vars:0*/
 //get a list of images missing alt text, then for each missing alt text, insert a new alt text to the html file
 var cheerio = require('cheerio'),
     asyncLib = require('async'),
@@ -16,10 +16,6 @@ var cheerio = require('cheerio'),
     $;
 
 function getAllPages(getAllPagesCb) {
-    if (err) {
-        getAllPages(err);
-        return;
-    }
     /*retrieve all the html files from the export*/
     htmlFiles = fs.readdirSync(currentPath)
         .filter(function (file) {
@@ -37,95 +33,92 @@ function getAllPages(getAllPagesCb) {
 }
 
 function pagesToImageObjs(pages, pagesToImgObjCb) {
-    if (err) {
-        pagesToImgObjCb(err);
-        return;
-    }
     /*for each html file,*/
-    var imageObjects = htmlFiles.reduce(function (alts, file) {
+    htmlFiles.reduce(function (alts, file) {
         //parse the html with cheerio
         var $ = cheerio.load(file.contents),
             images = $('img');
+        if (images.length === 0) {
+            pagesToImgObjCb(null, pages);
+        }
         images.each(function (i, image) {
             console.log('IMAGE OBJ', image);
             var alt = image.attr('alt');
             if (!alt || alt === '') {
-                //find the alt attributes from the images and make a list of them
+                // make a list of the alt attributes
                 var src = image.attr('src'),
                     split = src.split('/'),
                     source = split[0] + '/' + split[split.length - 1];
                 console.log('SOURCE', source);
                 noAltImgs.images.push({
-                    //find the file that the image is associated with. might need to use path stuff
+                    //find the file that the image is associated with
                     imageFile: source,
                     alt: ''
                 });
             }
         });
+        console.log('noAltImages', noAltImgs);
+        pagesToImgObjCb(null, pages, noAltImages);
     }, []);
-    pagesToImgObjCb(null, imageObjects);
 }
 
-function runPrompt(pages, imageObjs, promptCb) {
-    if (err) {
-        promptCb(err);
-        return;
-    }
-    //for every obj (which represents a file), 
-    console.log('noAltImages using the foreach', noAltImgs);
-    var getIndvImg = noAltImgs.forEach(function (image, i) {
-        console.log('IMAGE:', image);
-        console.log('IMAGE name', image.imageFile);
-        return image;
-    });
-
+//this function is the most complicated
+function runPrompt(pages, noAltImages, promptCb) {
+    //you have a collection of images,
     var indvImages = [{
         type: 'string',
-        description: 'Please enter alt text for the image ' + JSON.stringify(getIndvImg),
+        description: 'Please enter alt text for the image ' + JSON.stringify(image),
         required: true,
         message: 'alt text must be a string.'
 
     }];
-    console.log('getIndvImg', getIndvImg);
-    prompt.get( /*indvImages,*/ function (err, result) {
+
+    // iterate over the images and do the prompt thing.
+    function promptUser() {
+        prompt.get(indvImages, function (err, newImageObj) {
+            if (err) {
+                console.log('prompt.get ERR', err);
+                return;
+            }
+            newImageObj = {
+                imageFile: result.name,
+                newAlt: result.description
+            };
+        });
+    }
+    asyncLib.each(noAltImgs, promptUser, function (err) {
         if (err) {
-            console.log(err);
+            runPrompt(err);
             return;
         }
-        var newImageObj = {
-            imageFile: result.name,
-            newAlt: result.description
-        };
+        promptCb(null, pages, noAltImages, newImageObj);
     });
-    promptCb(null, pages, newImageObj);
 }
 
-function changeAltsHtml(pages, imageObject, changeAltsHtmlCb) {
-    if (err) {
-        changeAltsHtml(err);
-        return;
-    }
-    //not sure if this property will load the body
-    //find the matching image from noAltImages
-    image = noAltImages[i];
-    if (image.imageFile === imageObj.imageFile) {
-        //add newAlt to the image.alt on the obj from noAltImages
-        image.alt = imageObj.newAlt;
-    }
-    changeAltsHtmlCb(null, );
+function changeAltsHtml(pages, noAltImages, changeAltsHtmlCb) {
+    pages.forEach(function (page, i) {
+        var $ = cheerio.load(page.contents);
+        //find the matching image from noAltImages
+        image = noAltImages[i];
+        if (image.imageFile === imageObj.imageFile) {
+            //add newAlt to the image.alt on the obj from noAltImages
+            image.alt = imageObj.newAlt;
+        }
+    });
+    changeAltsHtmlCb(null, pages);
 }
 
-asyncLib.waterfall([getAllPages, pagesToImageObjs, runPrompt, changeAltsHtml], function (err, result) {
+asyncLib.waterfall([getAllPages, pagesToImageObjs, runPrompt, changeAltsHtml], function (err, pages) {
     if (err) {
         console.log(err);
         return;
     }
     //retrieve the htmls back from cheerio
-    // var contents = $.html(),
-    //var filename = file.name,
-    //var newPath = currentPath + '\\' + 'updatedFiles' + filename;
+    var contents = $.html(),
+        filename = pages[i].name,
+        newPath = currentPath + '\\' + 'updatedFiles' + filename;
     //make a new directory to store these html files
-    //fs.mkDirSync(newPath);
-    //fs.writeFileSync(newPath, contents);
-    prompt.start();
+    fs.mkDirSync(newPath);
+    fs.writeFileSync(newPath, contents);
 });
+prompt.start();
