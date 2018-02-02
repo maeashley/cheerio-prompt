@@ -10,14 +10,13 @@ var cheerio = require('cheerio'),
     fs = require('fs'),
     prompt = require('prompt'),
     pathLib = require('path'),
-    noAltImgs = [],
-    htmlFiles = [],
     currentPath = pathLib.resolve('.'),
+    chalk = require('chalk'),
     $;
 
 function getAllPages(getAllPagesCb) {
-    /*retrieve all the html files from the export*/
-    htmlFiles = fs.readdirSync(currentPath)
+    //retrieve all the html files from the files
+    var htmlFiles = fs.readdirSync(currentPath)
         .filter(function (file) {
             return file.includes('.html');
         })
@@ -32,84 +31,74 @@ function getAllPages(getAllPagesCb) {
     getAllPagesCb(null, htmlFiles);
 }
 
-function pagesToImageObjs(pages, pagesToImgObjCb) {
+function pagesToImageObjs(htmlFiles, pagesToImgObjCb) {
+    var alts = {
+        noAltImgs: [],
+        questions: []
+    };
+
+    //don't need to catch the reduce contents because you're editing the obj thats being passed
     htmlFiles.reduce(function (alts, file) {
         //parse the html with cheerio
         $ = cheerio.load(file.contents);
         var images = $('img');
-        if (images.length === 0) {
-            pagesToImgObjCb(null, pages);
-        }
         images.each(function (i, image) {
             image = $(image);
             var alt = image.attr('alt');
-            if (!alt || alt === '') {
+            if (alts.questions.length < 3 && (!alt || alt === '')) {
                 // make a list of the alt attributes
                 var src = image.attr('src'),
+                    //convert to pathLib...not sure if this is right
                     split = src.split('/'),
-                    source = split[0] + '/' + split[split.length - 1];
-                noAltImgs.push({
-                    //find the file that the image is associated with
-                    imageFile: source,
-                    alt: '',
-                    description: 'Please enter alt text for the image ' + source,
+                    source = pathLib.resolve(split[0], '/' + split[split.length - 1]),
+                    filename = split[split.length - 1];
+                //push each individual image question
+                alts.questions.push({
+                    //need the alt obj because results returns an obj
+                    name: 'alt' + alts.questions.length,
+                    description: chalk.green('Please enter alt text for the image ' + filename),
                     type: 'string',
-                    message: 'Alt text must be a string.'
+                    required: true,
+                    message: chalk.red('Alt text must be a string.')
+                });
+                //push each image obj to later match it
+                alts.noAltImgs.push({
+                    source: source,
+                    imageFile: filename
                 });
             }
         });
-        pagesToImgObjCb(null, pages, noAltImgs);
-    }, []);
+        return alts;
+    }, alts);
+    pagesToImgObjCb(null, htmlFiles, alts.noAltImgs, alts.questions);
 }
 
-//this function is going to be the most complicated
-function runPrompt(pages, noAltImgs, promptCb) {
-    // iterate over the images and prompt for alt text
-    var newImgObj;
-
-    function promptUser(getCallback) {
-        prompt.get(noAltImgs, function (err, result) {
-            if (err) {
-                console.log('prompt.get ERR', err);
-                return;
-            }
-            newImgObj = {
-                imageFile: result.name,
-                newAlt: result.description
-            };
-            getCallback(newImgObj);
-        });
-    }
-
-    //I think the results of the prompt will have to get pushed to a different array
-    asyncLib.each(noAltImgs, promptUser, function (err) {
+function runPrompt(pages, noAltImgs, questions, promptCb) {
+    prompt.get(questions, function (err, results) {
         if (err) {
             promptCb(err);
             return;
         }
-        promptCb(null, pages, noAltImgs, newImgObj);
+        //move the user data to our image array objs
+        noAltImgs.forEach(function (image, i) {
+            image.alt = results['alt' + i];
+        });
+        promptCb(null, pages, noAltImgs);
     });
+    prompt.start();
 }
 
-function changeAltsHtml(pages, noAltImgs, changeObj, changeAltsHtmlCb) {
-    //iterate through the images in each file and change the alt based on the prompt.
-    //need to use a reduce for this...
-    pages.reduce(function (newPages, page) {
+//noAltImgs array of objs now each have an alt property that needs to be on the html
+function changeAltsHtml(pages, noAltImgs, changeAltsHtmlCb) {
+    pages.forEach(function (page) {
+        //reparse the page
         $ = cheerio.load(page.contents);
-        //find the matching image from array
         var images = $('img');
-        if (images.length === 0) {
-            changeAltsHtmlCb(null, pages);
-        }
-        images.each(function (image) {
-            image = $(image);
-            if (image.imageFile === changeObj.imageFile) {
-                //add newAlt to the image.alt on the obj from noAltImages
-                image.alt = changeObj.newAlt;
-            }
-            changeAltsHtmlCb(null, pages);
-        });
-    }, []);
+        console.log('array of images', images)
+        //match up 'images' with the objs in noAltImgs
+        // image.attr('alt', noAltImgs[i].alt);
+    });
+    changeAltsHtmlCb(null, pages);
 }
 
 asyncLib.waterfall([getAllPages, pagesToImageObjs, runPrompt, changeAltsHtml], function (err, pages) {
@@ -117,13 +106,12 @@ asyncLib.waterfall([getAllPages, pagesToImageObjs, runPrompt, changeAltsHtml], f
         console.log(err);
         return;
     }
-    console.log(pages.length);
-    /*retrieve the htmls back from cheerio/
-    var contents = $.html(),
-        //not sure how to get the individual page to get the file name
-        newPath = pathLib.resolve(currentPath, '\\' + 'updatedFiles' + page);
-    //make directory and push files
+    var newPath = pathLib.resolve(currentPath, '\\' + 'updatedFiles');
     fs.mkDirSync(newPath);
-    fs.writeFileSync(newPath, contents);*/
+    pages.forEach(function (page) {
+        //contents is being written per page so it doesn't have to be written to the callback?
+        var contents = $.html();
+        fs.writeFileSync(newPath, contents);
+    });
+    console.log(chalk.cyan('PROCESS COMPLETE! Check the "updatedFiles" folder for the new files.'));
 });
-prompt.start();

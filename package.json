@@ -13,6 +13,7 @@
     "prompt-alts": "./cheerio.js"
   },
   "dependencies": {
+    "chalk": "^2.3.0",
     "cheerio": "^1.0.0-rc.2",
     "fs": "0.0.1-security",
     "path": "^0.12.7",
