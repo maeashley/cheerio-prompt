@@ -94,7 +94,7 @@ function changeAltsHtml(pages, noAltImgs, changeAltsHtmlCb) {
         //reparse the page
         $ = cheerio.load(page.contents);
         var images = $('img');
-        console.log('array of images', images)
+        console.log('array of images', images);
         //match up 'images' with the objs in noAltImgs
         // image.attr('alt', noAltImgs[i].alt);
     });
