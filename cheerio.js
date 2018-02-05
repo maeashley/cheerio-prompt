@@ -11,8 +11,7 @@ var cheerio = require('cheerio'),
     prompt = require('prompt'),
     pathLib = require('path'),
     currentPath = pathLib.resolve('.'),
-    chalk = require('chalk'),
-    $;
+    chalk = require('chalk');
 
 function getAllPages(getAllPagesCb) {
     //retrieve all the html files from the files
@@ -21,11 +20,9 @@ function getAllPages(getAllPagesCb) {
             return file.includes('.html');
         })
         .map(function (file) {
-            var path = file,
-                contents = fs.readFileSync(path, 'utf8');
             return {
-                file: path,
-                contents: contents
+                file: file,
+                contents: fs.readFileSync(file, 'utf8')
             };
         });
     getAllPagesCb(null, htmlFiles);
@@ -40,15 +37,15 @@ function pagesToImageObjs(htmlFiles, pagesToImgObjCb) {
     //don't need to catch the reduce contents because you're editing the obj thats being passed
     htmlFiles.reduce(function (alts, file) {
         //parse the html with cheerio
-        $ = cheerio.load(file.contents);
-        var images = $('img');
-        images.each(function (i, image) {
-            image = $(image);
+        file.dom = cheerio.load(file.contents);
+        var images = file.dom('img');
+        file.images = images.each(function (i, image) {
+            image = file.dom(image);
             var alt = image.attr('alt');
-            if (alts.questions.length < 3 && (!alt || alt === '')) {
+            if (alts.questions.length < 30 && (!alt || alt === '')) {
                 // make a list of the alt attributes
                 var src = image.attr('src'),
-                    //convert to pathLib...not sure if this is right
+                    //convert to url
                     split = src.split('/'),
                     source = pathLib.resolve(split[0], '/' + split[split.length - 1]),
                     filename = split[split.length - 1];
@@ -56,7 +53,7 @@ function pagesToImageObjs(htmlFiles, pagesToImgObjCb) {
                 alts.questions.push({
                     //need the alt obj because results returns an obj
                     name: 'alt' + alts.questions.length,
-                    description: chalk.green('Please enter alt text for the image ' + filename),
+                    description: chalk.green('Please enter alt text for the image ' + filename + '(' + file.file + ')'),
                     type: 'string',
                     required: true,
                     message: chalk.red('Alt text must be a string.')
@@ -70,6 +67,7 @@ function pagesToImageObjs(htmlFiles, pagesToImgObjCb) {
         });
         return alts;
     }, alts);
+    console.log(alts.noAltImgs.length);
     pagesToImgObjCb(null, htmlFiles, alts.noAltImgs, alts.questions);
 }
 
@@ -91,11 +89,9 @@ function runPrompt(pages, noAltImgs, questions, promptCb) {
 //noAltImgs array of objs now each have an alt property that needs to be on the html
 function changeAltsHtml(pages, noAltImgs, changeAltsHtmlCb) {
     pages.forEach(function (page) {
-        //reparse the page
-        $ = cheerio.load(page.contents);
-        var images = $('img');
-        images.each(function (image, i) {
-            image = $(image);
+        //images saved from previous search
+        page.images.each(function (image, i) {
+            image = page.dom(image);
             var src = image.attr('src');
             if (src) {
                 //convert to pathLib...not sure if this is right
@@ -106,10 +102,13 @@ function changeAltsHtml(pages, noAltImgs, changeAltsHtmlCb) {
                         return source === image.source;
                     });
                 if (match) {
-                    image.attr('alt', noAltImgs[i].alt);
+                    var newAlt = noAltImgs[i].alt;
+                    image.attr('alt', newAlt);
                 }
             }
         });
+        page.html = page.dom.html();
+        //could take the dom out since you're already saving it 
     });
     changeAltsHtmlCb(null, pages);
 }
@@ -123,12 +122,10 @@ asyncLib.waterfall([getAllPages, pagesToImageObjs, runPrompt, changeAltsHtml], f
         newPath = pathLib.resolve(currentPath, 'updatedFiles ' + timestamp);
     fs.mkdirSync(newPath);
     pages.forEach(function (page) {
-        console.log('page', page);
-        //contents are being written per page
-        var contents = $.html(),
-            splitPath = page.file.split('\\')[page.file.split('\\').length - 1],
-            path = newPath + '/' + splitPath;
-        fs.writeFileSync(path, contents);
+        var parsedPath = pathLib.parse(page.file),
+            fileName = parsedPath.name + parsedPath.ext,
+            path = pathLib.join(newPath, fileName);
+        fs.writeFileSync(path, page.html);
     });
     console.log(chalk.cyan('PROCESS COMPLETE! Check the "updatedFiles" folder for the new files.'));
 });
