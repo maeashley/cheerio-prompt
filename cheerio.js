@@ -3,7 +3,7 @@
 /*eslint-env node, es6*/
 /*eslint no-console:0*/
 /*eslint no-undef:1 */
-/*eslint no-unused-vars:0*/
+/*eslint no-unused-vars:1*/
 //get a list of images missing alt text, then for each missing alt text, insert a new alt text to the html file
 var cheerio = require('cheerio'),
     asyncLib = require('async'),
@@ -94,9 +94,22 @@ function changeAltsHtml(pages, noAltImgs, changeAltsHtmlCb) {
         //reparse the page
         $ = cheerio.load(page.contents);
         var images = $('img');
-        console.log('array of images', images);
-        //match up 'images' with the objs in noAltImgs
-        // image.attr('alt', noAltImgs[i].alt);
+        images.each(function (image, i) {
+            image = $(image);
+            var src = image.attr('src');
+            if (src) {
+                //convert to pathLib...not sure if this is right
+                var split = src.split('/'),
+                    source = pathLib.resolve(split[0], '/' + split[split.length - 1]),
+                    //check the source attr against the obj in the noAltImgs array
+                    match = noAltImgs.find(function (image) {
+                        return source === image.source;
+                    });
+                if (match) {
+                    image.attr('alt', noAltImgs[i].alt);
+                }
+            }
+        });
     });
     changeAltsHtmlCb(null, pages);
 }
@@ -106,12 +119,16 @@ asyncLib.waterfall([getAllPages, pagesToImageObjs, runPrompt, changeAltsHtml], f
         console.log(err);
         return;
     }
-    var newPath = pathLib.resolve(currentPath, '\\' + 'updatedFiles');
-    fs.mkDirSync(newPath);
+    var timestamp = Date.now(),
+        newPath = pathLib.resolve(currentPath, 'updatedFiles ' + timestamp);
+    fs.mkdirSync(newPath);
     pages.forEach(function (page) {
-        //contents is being written per page so it doesn't have to be written to the callback?
-        var contents = $.html();
-        fs.writeFileSync(newPath, contents);
+        console.log('page', page);
+        //contents are being written per page
+        var contents = $.html(),
+            splitPath = page.file.split('\\')[page.file.split('\\').length - 1],
+            path = newPath + '/' + splitPath;
+        fs.writeFileSync(path, contents);
     });
     console.log(chalk.cyan('PROCESS COMPLETE! Check the "updatedFiles" folder for the new files.'));
 });
