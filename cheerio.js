@@ -39,16 +39,16 @@ function pagesToImageObjs(htmlFiles, pagesToImgObjCb) {
         //parse the html with cheerio
         file.dom = cheerio.load(file.contents);
         var images = file.dom('img');
-        file.images = images.each(function (i, image) {
+        file.images = [];
+        images.each(function (i, image) {
             image = file.dom(image);
-            var alt = image.attr('alt');
-            if (alts.questions.length < 30 && (!alt || alt === '')) {
+            var alt = image.attr('alt'),
+                src = image.attr('src');
+            // console.log('original source', src);
+            if (alts.questions.length < 3 && (!alt || alt === '')) {
                 // make a list of the alt attributes
-                var src = image.attr('src'),
-                    //convert to url
-                    split = src.split('/'),
-                    source = pathLib.resolve(split[0], '/' + split[split.length - 1]),
-                    filename = split[split.length - 1];
+                var filename = pathLib.basename(src),
+                    source = pathLib.dirname(src) + '/' + filename;
                 //push each individual image question
                 alts.questions.push({
                     //need the alt obj because results returns an obj
@@ -63,11 +63,13 @@ function pagesToImageObjs(htmlFiles, pagesToImgObjCb) {
                     source: source,
                     imageFile: filename
                 });
+            } else if (src.includes('Course%20Files')) {
+                file.images.push(image);
             }
         });
         return alts;
     }, alts);
-    console.log(alts.noAltImgs.length);
+    console.log(chalk.magenta(' # images to name:', alts.noAltImgs.length));
     pagesToImgObjCb(null, htmlFiles, alts.noAltImgs, alts.questions);
 }
 
@@ -86,34 +88,42 @@ function runPrompt(pages, noAltImgs, questions, promptCb) {
     prompt.start();
 }
 
-//noAltImgs array of objs now each have an alt property that needs to be on the html
-function changeAltsHtml(pages, noAltImgs, changeAltsHtmlCb) {
+//make the changes to the html from alt on noAltImgs[i]
+function changeAltsHtml(pages, newAltImgs, changeAltsHtmlCb) {
+    //helper function to change the alt text
+    function changeAlt(image, newAlt) {
+        image.attr('alt', newAlt);
+    }
     pages.forEach(function (page) {
-        //images saved from previous search
-        page.images.each(function (image, i) {
+        //just to clean up the console printing
+        // if (page.images.length !== 0) {
+        //     console.log('#page ' + page.file, chalk.bgBlue('contains ' + page.images.length + ' images'));
+        // }
+        //images from the page object mapped previously
+        page.images.forEach(function (image) {
             image = page.dom(image);
             var src = image.attr('src');
-            if (src) {
-                //convert to pathLib...not sure if this is right
-                var split = src.split('/'),
-                    source = pathLib.resolve(split[0], '/' + split[split.length - 1]),
-                    //check the source attr against the obj in the noAltImgs array
-                    match = noAltImgs.find(function (image) {
-                        return source === image.source;
-                    });
-                if (match) {
-                    var newAlt = noAltImgs[i].alt;
-                    image.attr('alt', newAlt);
+            image.source = pathLib.basename(src);
+            var oldSrc = image.source;
+            //check the source attr against the obj in the newAltImgs array in order to match them
+            newAltImgs.forEach(function (image) {
+                console.log(chalk.bgRed('OLD'), oldSrc);
+                var newSrc = pathLib.basename(image.source);
+                console.log(chalk.bgGreen('newSrc'), newSrc);
+                if (newSrc === oldSrc) {
+                    console.log(chalk.bgGreen('MATCH'));
+                    changeAlt(image, image.alt);
                 }
-            }
+            });
         });
         page.html = page.dom.html();
         //could take the dom out since you're already saving it 
     });
     changeAltsHtmlCb(null, pages);
 }
+var functions = [getAllPages, pagesToImageObjs, runPrompt, changeAltsHtml];
 
-asyncLib.waterfall([getAllPages, pagesToImageObjs, runPrompt, changeAltsHtml], function (err, pages) {
+asyncLib.waterfall(functions, function (err, pages) {
     if (err) {
         console.log(err);
         return;
@@ -127,5 +137,5 @@ asyncLib.waterfall([getAllPages, pagesToImageObjs, runPrompt, changeAltsHtml], f
             path = pathLib.join(newPath, fileName);
         fs.writeFileSync(path, page.html);
     });
-    console.log(chalk.cyan('PROCESS COMPLETE! Check the "updatedFiles" folder for the new files.'));
+    console.log(chalk.cyan('PROCESS COMPLETE!'));
 });
