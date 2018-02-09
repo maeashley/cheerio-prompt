@@ -44,7 +44,6 @@ function pagesToImageObjs(htmlFiles, pagesToImgObjCb) {
             image = file.dom(image);
             var alt = image.attr('alt'),
                 src = image.attr('src');
-            // console.log('original source', src);
             if (alts.questions.length < 3 && (!alt || alt === '')) {
                 // make a list of the alt attributes
                 var filename = pathLib.basename(src),
@@ -61,8 +60,9 @@ function pagesToImageObjs(htmlFiles, pagesToImgObjCb) {
                 //push each image obj to later match it
                 alts.noAltImgs.push({
                     source: source,
-                    imageFile: filename
+                    imageFile: file.file
                 });
+                file.images.push(image);
             } else if (src.includes('Course%20Files')) {
                 file.images.push(image);
             }
@@ -90,15 +90,7 @@ function runPrompt(pages, noAltImgs, questions, promptCb) {
 
 //make the changes to the html from alt on noAltImgs[i]
 function changeAltsHtml(pages, newAltImgs, changeAltsHtmlCb) {
-    //helper function to change the alt text
-    function changeAlt(image, newAlt) {
-        image.attr('alt', newAlt);
-    }
     pages.forEach(function (page) {
-        //just to clean up the console printing
-        // if (page.images.length !== 0) {
-        //     console.log('#page ' + page.file, chalk.bgBlue('contains ' + page.images.length + ' images'));
-        // }
         //images from the page object mapped previously
         page.images.forEach(function (image) {
             image = page.dom(image);
@@ -106,19 +98,21 @@ function changeAltsHtml(pages, newAltImgs, changeAltsHtmlCb) {
             image.source = pathLib.basename(src);
             var oldSrc = image.source;
             //check the source attr against the obj in the newAltImgs array in order to match them
-            newAltImgs.forEach(function (image) {
-                console.log(chalk.bgRed('OLD'), oldSrc);
-                var newSrc = pathLib.basename(image.source);
-                console.log(chalk.bgGreen('newSrc'), newSrc);
+            newAltImgs.forEach(function (newAltImage) {
+                var newSrc = pathLib.basename(newAltImage.source);
                 if (newSrc === oldSrc) {
-                    console.log(chalk.bgGreen('MATCH'));
-                    changeAlt(image, image.alt);
+                    console.log(chalk.bgGreen('MATCH ' + newAltImage.imageFile));
+                    changeAlt(image, newAltImage.alt);
                 }
             });
         });
         page.html = page.dom.html();
         //could take the dom out since you're already saving it 
     });
+    //helper function to change the alt text
+    function changeAlt(image, newAlt) {
+        image.attr('alt', newAlt);
+    }
     changeAltsHtmlCb(null, pages);
 }
 var functions = [getAllPages, pagesToImageObjs, runPrompt, changeAltsHtml];
