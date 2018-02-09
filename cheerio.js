@@ -44,10 +44,10 @@ function pagesToImageObjs(htmlFiles, pagesToImgObjCb) {
             image = file.dom(image);
             var alt = image.attr('alt'),
                 src = image.attr('src');
-            if (alts.questions.length < 3 && (!alt || alt === '')) {
+            if (!alt || alt === '') {
                 // make a list of the alt attributes
                 var filename = pathLib.basename(src),
-                    source = pathLib.dirname(src) + '/' + filename;
+                    source = pathLib.resolve(pathLib.dirname(src), filename);
                 //push each individual image question
                 alts.questions.push({
                     //need the alt obj because results returns an obj
